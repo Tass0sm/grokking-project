@@ -45,6 +45,7 @@ class Transformer(nnx.Module):
                     num_heads=heads,
                     in_features=dim,
                     dropout_rate=dropout,
+                    decode=False,
                     rngs=rngs
                 ),
                 FeedForward(dim, 4 * dim, dropout, rngs=rngs)
@@ -60,13 +61,13 @@ class Transformer(nnx.Module):
 
         # Transformer blocks
         for attn, ffn in self.blocks:
-            x = x + attn(x, training=training)
+            x = x + attn(x, deterministic=not training)
             x = x + ffn(x, training=training)
 
         x = self.final_norm(x)
 
         # Pool
-        if self.pool == 'mean':
+        if self._pool == 'mean':
             x = jnp.mean(x, axis=1)  # [b, dim]
         else:
             # last token
