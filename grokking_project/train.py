@@ -143,8 +143,8 @@ def main(model, divisor, n_epochs, seed):
                 "val_acc": val_acc,
             }, epoch)
 
-            if i % 100 == 0:
-                print(f"Finished epoch {i}")
+            if epoch % 100 == 0:
+                print(f"Finished epoch {epoch}")
     
 
 if __name__ == "__main__":
