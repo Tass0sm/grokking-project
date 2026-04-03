@@ -13,3 +13,4 @@ python = ">=3.12,<3.13"
 [pypi-dependencies]
 jax = { version = ">=0.9.2, <0.10", extras = ["cuda12"] }
 flax = ">=0.12.6, <0.13"
+optax = ">=0.2.8, <0.3"
