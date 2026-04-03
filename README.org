@@ -1,0 +1,5 @@
+#+title: Grokking Project
+
+* References
+
+1. https://github.com/atveit/jax_grokking
