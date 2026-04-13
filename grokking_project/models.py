@@ -46,6 +46,7 @@ class Transformer(nnx.Module):
                     in_features=dim,
                     dropout_rate=dropout,
                     decode=False,
+                    normalize_qk=True,
                     rngs=rngs
                 ),
                 FeedForward(dim, 4 * dim, dropout, rngs=rngs)
