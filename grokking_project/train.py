@@ -63,10 +63,10 @@ def main(model, divisor, n_epochs, seed):
     n_tokens=divisor+1
     model = model_classes[model](
         n_tokens=n_tokens, # [0, divisor) for numbers and +1 for equals
-        dim=256,
-        heads=1,
-        dropout=0.2,
-        depth=1,
+        dim=128,
+        heads=4,
+        dropout=0.1,
+        depth=2,
         rngs=rngs
     )
 
@@ -151,8 +151,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", default="transformer")
     parser.add_argument("--divisor", type=int, default=10)
-    parser.add_argument("--n_epochs", type=int, default=10)
-    parser.add_argument("--seed", default=0)
+    parser.add_argument("--n_epochs", type=int, default=10000)
+    parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
 
     mlflow.set_tracking_uri("sqlite:////home/tassos/.local/share/mlflow/runs.db")
