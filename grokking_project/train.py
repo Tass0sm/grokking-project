@@ -48,7 +48,7 @@ def generate_data(p: int, train_fraction: float = 0.5, seed: int = 42):
     return X_train, y_train, X_test, y_test
 
 
-def main(model, divisor, n_epochs, seed):
+def main(model, optimizer, divisor, n_epochs, seed):
 
     ###########################################################################
     #                               create model                              #
@@ -82,7 +82,12 @@ def main(model, divisor, n_epochs, seed):
     #                              train with SGD                             #
     ###########################################################################
 
-    tx = optax.sgd(1e-4)
+    optimizers = {
+        "sgd": optax.sgd(1e-3),
+        "lbfgs": optax.lbfgs(1e-3)
+    }
+
+    tx = optimizers[optimizer]
     optimizer = nnx.Optimizer(model, tx, wrt=nnx.Param)
 
     @nnx.jit
@@ -150,6 +155,7 @@ def main(model, divisor, n_epochs, seed):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", default="transformer")
+    parser.add_argument("--optimizer", default="sgd")
     parser.add_argument("--divisor", type=int, default=10)
     parser.add_argument("--n_epochs", type=int, default=10000)
     parser.add_argument("--seed", type=int, default=0)
@@ -160,6 +166,7 @@ if __name__ == "__main__":
         mlflow.set_experiment("grokking")
 
     main(model=args.model,
+         optimizer=args.optimizer,
          divisor=args.divisor,
          n_epochs=args.n_epochs,
          seed=args.seed)
