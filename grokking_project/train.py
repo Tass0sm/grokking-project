@@ -10,6 +10,7 @@ import optax
 import mlflow
 
 from grokking_project.models import Transformer
+from grokking_project import my_optimizers
 
 
 def generate_data(p: int, train_fraction: float = 0.5, seed: int = 42):
@@ -86,7 +87,8 @@ def main(model, optimizer_name, divisor, n_epochs, lr, seed):
         "sgd": optax.sgd(lr),
         "adam": optax.adam(lr),
         "adamw": optax.adamw(lr),
-        "lbfgs": optax.lbfgs(lr)
+        "lbfgs": optax.lbfgs(lr),
+        "lissa": my_optimizers.lissa(lr),
     }
 
     tx = optimizers[optimizer_name]
