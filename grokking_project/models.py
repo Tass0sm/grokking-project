@@ -11,14 +11,14 @@ class FeedForward(nnx.Module):
         self.w2 = nnx.Linear(hidden_dim, dim, use_bias=False, rngs=rngs)
         self.dropout_layer = nnx.Dropout(rate=dropout, rngs=rngs)
 
-    def __call__(self, x, training=True):
+    def __call__(self, x, rngs=None, training=True):
         x_norm = self.norm(x)
         x1 = self.w1(x_norm)          # [b, seq, hidden_dim]
         x_silu = nnx.silu(x1)
         # Gating branch
         x2 = self.w3(x_norm)          # [b, seq, hidden_dim]
         gated = x_silu * x2
-        gated = self.dropout_layer(gated, deterministic=not training)
+        gated = self.dropout_layer(gated, rngs=rngs, deterministic=not training)
         out = self.w2(gated)          # [b, seq, dim]
         return out
 
@@ -56,14 +56,14 @@ class Transformer(nnx.Module):
         self.final_norm = nnx.RMSNorm(dim, rngs=rngs)
         self.output_linear = nnx.Linear(dim, n_tokens, use_bias=False, rngs=rngs)
 
-    def __call__(self, x, training=True):
+    def __call__(self, x, rngs=None, training=True):
         # Token embeddings
         x = self.embedding(x)  # [batch, seq_len, dim]
 
         # Transformer blocks
         for attn, ffn in self.blocks:
-            x = x + attn(x, deterministic=not training)
-            x = x + ffn(x, training=training)
+            x = x + attn(x, rngs=rngs, training=training)
+            x = x + ffn(x, rngs=rngs, training=training)
 
         x = self.final_norm(x)
 

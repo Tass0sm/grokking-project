@@ -48,7 +48,7 @@ def generate_data(p: int, train_fraction: float = 0.5, seed: int = 42):
     return X_train, y_train, X_test, y_test
 
 
-def main(model, optimizer, divisor, n_epochs, seed):
+def main(model, optimizer_name, divisor, n_epochs, lr, seed):
 
     ###########################################################################
     #                               create model                              #
@@ -83,26 +83,42 @@ def main(model, optimizer, divisor, n_epochs, seed):
     ###########################################################################
 
     optimizers = {
-        "sgd": optax.sgd(1e-3),
-        "lbfgs": optax.lbfgs(1e-3)
+        "sgd": optax.sgd(lr),
+        "adam": optax.adam(lr),
+        "adamw": optax.adamw(lr),
+        "lbfgs": optax.lbfgs(lr)
     }
 
-    tx = optimizers[optimizer]
+    tx = optimizers[optimizer_name]
     optimizer = nnx.Optimizer(model, tx, wrt=nnx.Param)
 
     @nnx.jit
-    def train_step(model: nnx.Module, optimizer: nnx.Optimizer, x, y):
-        def loss_fn(model):
-            logits = model(x)
+    def train_step(model: nnx.Module, optimizer: nnx.Optimizer, x, y, rngs):
+
+        # rngs is a collection of random number generators used for both the
+        # main loss function + grads evaluation, and the one used by the
+        # linesearch.
+
+        def loss_fn(model, rngs):
+            logits = model(x, rngs=rngs)
             one_hot = jax.nn.one_hot(y, n_tokens)
             loss = optax.softmax_cross_entropy(logits, one_hot).mean()
-            return loss
+            preds = jnp.argmax(logits, axis=-1)
+            acc = jnp.sum((preds == y).astype(jnp.float32))
+            return loss, acc
 
-        # nnx.value_and_grad handles model being stateful?
-        loss, grads = nnx.value_and_grad(loss_fn)(model)
+        graphdef, _, rest = nnx.split(model, nnx.Param, ...)
+        rng_graphdef, rng_state = nnx.split(rngs)
 
-        optimizer.update(model, grads)
-        return loss
+        def loss_fn_state(state, rng_state):
+            m = nnx.merge(graphdef, state, rest)
+            r = nnx.merge(rng_graphdef, rng_state)
+            return loss_fn(m, r)[0]
+
+        (loss, acc), grads = nnx.value_and_grad(loss_fn, has_aux=True)(model, rngs)
+
+        optimizer.update(model, grads, value=loss, grad=grads, value_fn=loss_fn_state, rng_state=rng_state)
+        return loss, acc
 
     @nnx.jit
     def eval_step(model: nnx.Module, x, y):
@@ -111,6 +127,21 @@ def main(model, optimizer, divisor, n_epochs, seed):
         loss = optax.softmax_cross_entropy(logits, one_hot).mean()
         preds = jnp.argmax(logits, axis=-1)
         acc = jnp.mean((preds == y).astype(jnp.float32))
+
+        # jax.lax.cond(
+        #     acc > 0.45,
+        #     lambda ctx: jax.debug.breakpoint(),  # True branch: pause execution
+        #     lambda ctx: None,                    # False branch: do nothing
+        #     operand={
+        #         "logits": logits,
+        #         "one_hot": one_hot,
+        #         "loss": loss,
+        #         "y": y,
+        #         "preds": preds,
+        #         "acc": acc,
+        #     }
+        # )
+
         return loss, acc
 
     batch_size = 512
@@ -120,22 +151,34 @@ def main(model, optimizer, divisor, n_epochs, seed):
 
     with mlflow.start_run() as run:
 
+        mlflow.log_params({
+            "divisor": divisor,
+            "optimizer": optimizer_name,
+            "lr": lr,
+            "seed": seed
+        })
+
         for epoch in range(1, n_epochs + 1):
             # Shuffle each epoch
             perm = np.random.permutation(num_train)
             X_train = X_train[perm]
             y_train = y_train[perm]
-    
+
+            # new rng
+            rngs = rngs.fork()
+
             epoch_loss = 0.0
             epoch_acc_count = 0
             for i in range(num_batches):
                 batch_X = X_train[i * batch_size : (i+1) * batch_size]
                 batch_y = y_train[i * batch_size : (i+1) * batch_size]
     
-                loss = train_step(model, optimizer, batch_X, batch_y)
+                loss, acc_count = train_step(model, optimizer, batch_X, batch_y, rngs)
+                epoch_acc_count += float(acc_count)
                 epoch_loss += float(loss) * batch_X.shape[0]
     
             train_loss = epoch_loss / num_train
+            train_acc = epoch_acc_count / num_train
     
             # Validation set
             val_loss, val_acc = eval_step(model, X_val, y_val)
@@ -143,7 +186,8 @@ def main(model, optimizer, divisor, n_epochs, seed):
             val_acc  = float(val_acc)
 
             mlflow.log_metrics({
-                "train_loss": epoch_loss,
+                "train_loss": train_loss,
+                "train_acc": train_acc,
                 "val_loss": val_loss,
                 "val_acc": val_acc,
             }, epoch)
@@ -156,8 +200,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", default="transformer")
     parser.add_argument("--optimizer", default="sgd")
+    parser.add_argument("--lr", default=1e-3)
     parser.add_argument("--divisor", type=int, default=10)
-    parser.add_argument("--n_epochs", type=int, default=10000)
+    parser.add_argument("--n_epochs", type=int, default=5000)
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
 
@@ -166,7 +211,8 @@ if __name__ == "__main__":
         mlflow.set_experiment("grokking")
 
     main(model=args.model,
-         optimizer=args.optimizer,
+         optimizer_name=args.optimizer,
          divisor=args.divisor,
          n_epochs=args.n_epochs,
+         lr=args.lr,
          seed=args.seed)
