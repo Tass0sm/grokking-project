@@ -101,7 +101,7 @@ def main(model, optimizer_name, divisor, n_epochs, lr, seed):
         # main loss function + grads evaluation, and the one used by the
         # linesearch.
 
-        def loss_fn(model, rngs):
+        def loss_fn(model, x, y, rngs):
             logits = model(x, rngs=rngs)
             one_hot = jax.nn.one_hot(y, n_tokens)
             loss = optax.softmax_cross_entropy(logits, one_hot).mean()
@@ -112,14 +112,14 @@ def main(model, optimizer_name, divisor, n_epochs, lr, seed):
         graphdef, _, rest = nnx.split(model, nnx.Param, ...)
         rng_graphdef, rng_state = nnx.split(rngs)
 
-        def loss_fn_state(state, rng_state):
+        def loss_fn_state(state, x, y, rng_state):
             m = nnx.merge(graphdef, state, rest)
             r = nnx.merge(rng_graphdef, rng_state)
-            return loss_fn(m, r)[0]
+            return loss_fn(m, x, y, r)[0]
 
-        (loss, acc), grads = nnx.value_and_grad(loss_fn, has_aux=True)(model, rngs)
+        (loss, acc), grads = nnx.value_and_grad(loss_fn, has_aux=True)(model, x, y, rngs)
 
-        optimizer.update(model, grads, value=loss, grad=grads, value_fn=loss_fn_state, rng_state=rng_state)
+        optimizer.update(model, grads, value=loss, grad=grads, value_fn=loss_fn_state, rng_state=rng_state, lissa_batch_x=x, lissa_batch_y=y)
         return loss, acc
 
     @nnx.jit
