@@ -10,6 +10,7 @@ import optax
 import mlflow
 
 from grokking_project.models import Transformer
+from grokking_project.config_utils import build_subcommand_parser
 from grokking_project import my_optimizers
 
 
@@ -49,7 +50,7 @@ def generate_data(p: int, train_fraction: float = 0.5, seed: int = 42):
     return X_train, y_train, X_test, y_test
 
 
-def main(model, optimizer_name, divisor, n_epochs, lr, seed):
+def main(model, optimizer_name, divisor, n_epochs, lr, seed, remaining_args):
 
     ###########################################################################
     #                               create model                              #
@@ -84,14 +85,19 @@ def main(model, optimizer_name, divisor, n_epochs, lr, seed):
     ###########################################################################
 
     optimizers = {
-        "sgd": optax.sgd(lr),
-        "adam": optax.adam(lr),
-        "adamw": optax.adamw(lr),
-        "lbfgs": optax.lbfgs(lr),
-        "lissa": my_optimizers.lissa(lr, alpha=1e-4),
+        "sgd": optax.sgd,
+        "adam": optax.adam,
+        "adamw": optax.adamw,
+        "lbfgs": optax.lbfgs,
+        "lissa": my_optimizers.lissa,
     }
 
-    tx = optimizers[optimizer_name]
+    tx_fn = optimizers[optimizer_name]
+    tx_args_parser = build_subcommand_parser(optimizer_name, tx_fn)
+    tx_args, _ = tx_args_parser.parse_known_args(remaining_args)
+    tx_args = vars(tx_args).copy()
+
+    tx = tx_fn(lr, **tx_args)
     optimizer = nnx.Optimizer(model, tx, wrt=nnx.Param)
 
     @nnx.jit
@@ -158,7 +164,7 @@ def main(model, optimizer_name, divisor, n_epochs, lr, seed):
             "optimizer": optimizer_name,
             "lr": lr,
             "seed": seed
-        })
+        } | tx_args)
 
         for epoch in range(1, n_epochs + 1):
             # Shuffle each epoch
@@ -203,10 +209,10 @@ if __name__ == "__main__":
     parser.add_argument("--model", default="transformer")
     parser.add_argument("--optimizer", default="sgd")
     parser.add_argument("--lr", default=1e-3)
-    parser.add_argument("--divisor", type=int, default=10)
-    parser.add_argument("--n_epochs", type=int, default=5000)
+    parser.add_argument("--divisor", type=int, default=113)
+    parser.add_argument("--n_epochs", type=int, default=10000)
     parser.add_argument("--seed", type=int, default=0)
-    args = parser.parse_args()
+    args, remaining_args = parser.parse_known_args()
 
     mlflow.set_tracking_uri("sqlite:////home/tassos/.local/share/mlflow/runs.db")
     if os.getenv("MLFLOW_EXPERIMENT_NAME") is None:
@@ -217,4 +223,5 @@ if __name__ == "__main__":
          divisor=args.divisor,
          n_epochs=args.n_epochs,
          lr=args.lr,
-         seed=args.seed)
+         seed=args.seed,
+         remaining_args=remaining_args)
