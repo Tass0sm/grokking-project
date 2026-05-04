@@ -15,8 +15,10 @@ from optax.transforms import _clipping
 
 
 def scale_by_lissa(
-    S1: jax.typing.ArrayLike = 1,
-    S2: jax.typing.ArrayLike = 2,
+        S1: jax.typing.ArrayLike = 5,
+        S2: jax.typing.ArrayLike = 5,
+        alpha: float = 1.0,
+        use_richardson_iteration: bool = False
 ) -> base.GradientTransformation:
     assert S1 > 0 and S2 > 1, "S1 and S2 must be greater than 0"
 
@@ -42,7 +44,10 @@ def scale_by_lissa(
             pass
 
         def ith_h_inverse_times_grad(ith_batch_x, ith_batch_y):
-            X_i0 = updates
+            if use_richardson_iteration:
+                X_i0 = torch.zeros_like(updates)
+            else:
+                X_i0 = updates
 
             #
             def f(X_ij, xy):
@@ -57,14 +62,22 @@ def scale_by_lissa(
                     (X_ij,)
                 )
 
-                # X[i, j+1] = \nabla f(x_t) + (I - \tilde{\nabla}^2 f[i, j](x_t))X[i, j]
-                # X[i, j+1] = \nabla f(x_t) + (X[i, j] - \tilde{\nabla}^2 f[i, j](x_t) @ X[i, j])
-                # X[i, j+1] = g + (v - h @ v)
-                # X[i, j+1] = g + (v - hv)
-                X_ij_plus_1 = jax.tree.map(
-                    lambda g, v, hv: g + (v - hv),
-                    updates, X_ij, H_ij_F
-                )
+                if use_richardson_iteration:
+                    # richardson iteration, based on author's implementation
+                    # rather than pseudocode in paper
+                    X_ij_plus_1 = jax.tree.map(
+                        lambda g, v, hv: v + alpha * (g - hv),
+                        updates, X_ij, H_ij_F
+                    )
+                else:
+                    # X[i, j+1] = \nabla f(x_t) + (I - \tilde{\nabla}^2 f[i, j](x_t))X[i, j]
+                    # X[i, j+1] = \nabla f(x_t) + (X[i, j] - \tilde{\nabla}^2 f[i, j](x_t) @ X[i, j])
+                    # X[i, j+1] = g + (v - h @ v)
+                    # X[i, j+1] = g + (v - hv)
+                    X_ij_plus_1 = jax.tree.map(
+                        lambda g, v, hv: g + (v - alpha * hv),
+                        updates, X_ij, H_ij_F
+                    )
 
                 return X_ij_plus_1, None
 
@@ -90,6 +103,7 @@ def lissa(
     learning_rate: base.ScalarOrSchedule,
     S1: int = 1,
     S2: int = 2,
+    alpha: float = 1.0,
 ) -> base.GradientTransformationExtraArgs:
     r"""The Linear (time) Stochastic Second-Order Algorithm (LiSSA).
     """
@@ -98,6 +112,7 @@ def lissa(
         scale_by_lissa(
             S1=S1,
             S2=S2,
+            alpha=alpha,
         ),
         transform.scale_by_learning_rate(learning_rate),
     )

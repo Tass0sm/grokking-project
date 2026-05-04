@@ -88,7 +88,7 @@ def main(model, optimizer_name, divisor, n_epochs, lr, seed):
         "adam": optax.adam(lr),
         "adamw": optax.adamw(lr),
         "lbfgs": optax.lbfgs(lr),
-        "lissa": my_optimizers.lissa(lr),
+        "lissa": my_optimizers.lissa(lr, alpha=1e-4),
     }
 
     tx = optimizers[optimizer_name]
