@@ -45,7 +45,7 @@ def scale_by_lissa(
 
         def ith_h_inverse_times_grad(ith_batch_x, ith_batch_y):
             if use_richardson_iteration:
-                X_i0 = torch.zeros_like(updates)
+                X_i0 = jax.tree.map(jnp.zeros_like, updates)
             else:
                 X_i0 = updates
 
@@ -104,6 +104,7 @@ def lissa(
     S1: int = 1,
     S2: int = 2,
     alpha: float = 1.0,
+    use_richardson_iteration: bool = False,
 ) -> base.GradientTransformationExtraArgs:
     r"""The Linear (time) Stochastic Second-Order Algorithm (LiSSA).
     """
@@ -113,6 +114,7 @@ def lissa(
             S1=S1,
             S2=S2,
             alpha=alpha,
+            use_richardson_iteration=use_richardson_iteration,
         ),
         transform.scale_by_learning_rate(learning_rate),
     )
